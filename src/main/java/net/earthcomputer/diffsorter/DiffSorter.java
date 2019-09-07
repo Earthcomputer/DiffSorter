@@ -6,6 +6,7 @@ import com.github.difflib.text.DiffRow;
 import com.github.difflib.unifieddiff.UnifiedDiff;
 import com.github.difflib.unifieddiff.UnifiedDiffFile;
 import de.sciss.syntaxpane.DefaultSyntaxKit;
+import de.sciss.syntaxpane.SyntaxDocument;
 import de.sciss.syntaxpane.syntaxkits.JavaSyntaxKit;
 
 import javax.swing.*;
@@ -176,6 +177,7 @@ public class DiffSorter {
         UnifiedDiff diff = ProgramState.categories.get(ProgramState.currentCategory);
         int currentFile = 0;
         for (UnifiedDiffFile file : diff.getFiles()) {
+            System.out.println("Loading file " + currentFile + " / " + diff.getFiles().size());
             ProgramState.leftDiffFilePositions.add(left.length());
             ProgramState.rightDiffFilePositions.add(right.length());
             if (file.getDiffCommand() != null && file.getDiffCommand().startsWith("Only in")) {
@@ -228,8 +230,10 @@ public class DiffSorter {
             }
             currentFile++;
         }
+        System.out.println("Setting text");
         leftEditorPane.setText(left.toString());
         rightEditorPane.setText(right.toString());
+        System.out.println("Highlighter");
         class OverNewlineHighlighter extends DefaultHighlighter.DefaultHighlightPainter {
             public OverNewlineHighlighter(Color color) {
                 super(color);
@@ -266,10 +270,13 @@ public class DiffSorter {
             e.printStackTrace();
         }
 
+        System.out.println("Regression model");
         // Regression model
         ProgramState.createModel();
 
+        System.out.println("Updating selections");
         updateSelections(frame);
+        System.out.println("Imported");
     }
 
     private static int addDiffLine(StringBuilder output, List<Highlight> highlights, List<Highlight> overlayHighlights, // outputs
@@ -358,6 +365,9 @@ public class DiffSorter {
     private JEditorPane createSyntaxPane(boolean left) {
         JEditorPane syntaxPane = new JEditorPane();
         syntaxPane.setEditorKit(new JavaSyntaxKit());
+        SyntaxDocument doc = (SyntaxDocument) syntaxPane.getDocument();
+        doc.setContainer(syntaxPane);
+        doc.setLarge(true);
         syntaxPane.setEditable(false);
         syntaxPane.setContentType("text/java");
         syntaxPane.setFont(syntaxPane.getFont().deriveFont(16f));
