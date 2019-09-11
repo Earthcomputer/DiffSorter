@@ -176,8 +176,8 @@ public class DiffSorter {
         StringBuilder right = new StringBuilder();
         UnifiedDiff diff = ProgramState.categories.get(ProgramState.currentCategory);
         int currentFile = 0;
+        System.out.println("Loading files");
         for (UnifiedDiffFile file : diff.getFiles()) {
-            System.out.println("Loading file " + currentFile + " / " + diff.getFiles().size());
             ProgramState.leftDiffFilePositions.add(left.length());
             ProgramState.rightDiffFilePositions.add(right.length());
             if (file.getDiffCommand() != null && file.getDiffCommand().startsWith("Only in")) {
