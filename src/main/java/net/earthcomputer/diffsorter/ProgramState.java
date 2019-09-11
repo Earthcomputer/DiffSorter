@@ -1,6 +1,7 @@
 package net.earthcomputer.diffsorter;
 
 import com.github.difflib.patch.AbstractDelta;
+import com.github.difflib.text.DiffRow;
 import com.github.difflib.text.DiffRowGenerator;
 import com.github.difflib.unifieddiff.UnifiedDiff;
 import com.github.difflib.unifieddiff.UnifiedDiffFile;
@@ -47,6 +48,7 @@ public class ProgramState {
     public static int selectedFile;
     public static int selectedHunk = -1;
     public static Map<String, UnifiedDiff> categories = new HashMap<>();
+    public static IdentityHashMap<AbstractDelta, List<DiffRow>> diffRowCache = new IdentityHashMap<>();
 
     private static List<List<String>> features = new ArrayList<>();
     private static Map<String, FMatrixRMaj> models = new HashMap<>();
@@ -72,6 +74,8 @@ public class ProgramState {
 
         ProgramState.categories = diffs;
         ProgramState.currentCategory = "unsorted";
+
+        diffRowCache.clear();
 
         ui.refresh(frame);
     }

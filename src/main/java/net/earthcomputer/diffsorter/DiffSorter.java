@@ -209,10 +209,21 @@ public class DiffSorter {
                 begin = right.length();
                 right.append("@@ ").append(delta.getTarget().getPosition()).append(",").append(delta.getTarget().size()).append(" @@\n");
                 rightHighlights.add(new Highlight(begin, right.length(), Color.LIGHT_GRAY));
-                try {
-                    int leftInlineBegin = -1;
-                    int rightInlineBegin = -1;
-                    for (DiffRow line : ProgramState.DIFF_ROW_GENERATOR.generateDiffRows(delta.getSource().getLines(), delta.getTarget().getLines())) {
+                int leftInlineBegin = -1;
+                int rightInlineBegin = -1;
+
+                List<DiffRow> lines = ProgramState.diffRowCache.computeIfAbsent(delta, d -> {
+                    try {
+                        return ProgramState.DIFF_ROW_GENERATOR.generateDiffRows(d.getSource().getLines(), d.getTarget().getLines());
+                    } catch (DiffException e) {
+                        left.append("Exception generating diff\n");
+                        right.append("\n");
+                        e.printStackTrace();
+                        return null;
+                    }
+                });
+                if (lines != null) {
+                    for (DiffRow line : lines) {
                         leftInlineBegin = addDiffLine(left, leftHighlights, leftOverlayHighlights,
                                 line.getOldLine(), line.getTag(), leftInlineBegin,
                                 ProgramState.BEGINOLD, ProgramState.ENDOLD, new Color(255, 130, 141), DiffRow.Tag.INSERT);
@@ -220,11 +231,8 @@ public class DiffSorter {
                                 line.getNewLine(), line.getTag(), rightInlineBegin,
                                 ProgramState.BEGINNEW, ProgramState.ENDNEW, new Color(110, 255, 118), DiffRow.Tag.DELETE);
                     }
-                } catch (DiffException e) {
-                    left.append("Exception generating diff\n");
-                    right.append("\n");
-                    e.printStackTrace();
                 }
+
                 ProgramState.leftDiffHunkPositions.add(new ProgramState.HunkPos(leftHunkStart, left.length(), currentFile));
                 ProgramState.rightDiffHunkPositions.add(new ProgramState.HunkPos(rightHunkStart, right.length(), currentFile));
             }
