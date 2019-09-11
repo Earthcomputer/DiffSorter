@@ -48,7 +48,7 @@ public class ProgramState {
     public static int selectedFile;
     public static int selectedHunk = -1;
     public static Map<String, UnifiedDiff> categories = new HashMap<>();
-    public static IdentityHashMap<AbstractDelta, List<DiffRow>> diffRowCache = new IdentityHashMap<>();
+    public static IdentityHashMap<AbstractDelta<String>, List<DiffRow>> diffRowCache = new IdentityHashMap<>();
 
     private static List<List<String>> features = new ArrayList<>();
     private static Map<String, FMatrixRMaj> models = new HashMap<>();
