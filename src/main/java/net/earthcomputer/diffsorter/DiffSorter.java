@@ -159,132 +159,136 @@ public class DiffSorter {
         }
         categoryPanel.revalidate();
 
-        // Editor panes
-        leftEditorPane.getHighlighter().removeAllHighlights();
-        rightEditorPane.getHighlighter().removeAllHighlights();
-        List<Highlight> leftHighlights = new ArrayList<>();
-        List<Highlight> rightHighlights = new ArrayList<>();
-        List<Highlight> leftOverlayHighlights = new ArrayList<>();
-        List<Highlight> rightOverlayHighlights = new ArrayList<>();
+        ProgressDialog.startLongTask(frame, progress -> {
+            // Editor panes
+            leftEditorPane.getHighlighter().removeAllHighlights();
+            rightEditorPane.getHighlighter().removeAllHighlights();
+            List<Highlight> leftHighlights = new ArrayList<>();
+            List<Highlight> rightHighlights = new ArrayList<>();
+            List<Highlight> leftOverlayHighlights = new ArrayList<>();
+            List<Highlight> rightOverlayHighlights = new ArrayList<>();
 
-        // apologies for the state of this code
-        ProgramState.leftDiffHunkPositions.clear();
-        ProgramState.leftDiffFilePositions.clear();
-        ProgramState.rightDiffHunkPositions.clear();
-        ProgramState.rightDiffFilePositions.clear();
-        StringBuilder left = new StringBuilder();
-        StringBuilder right = new StringBuilder();
-        UnifiedDiff diff = ProgramState.categories.get(ProgramState.currentCategory);
-        int currentFile = 0;
-        System.out.println("Loading files");
-        for (UnifiedDiffFile file : diff.getFiles()) {
-            ProgramState.leftDiffFilePositions.add(left.length());
-            ProgramState.rightDiffFilePositions.add(right.length());
-            if (file.getDiffCommand() != null && file.getDiffCommand().startsWith("Only in")) {
+            // apologies for the state of this code
+            ProgramState.leftDiffHunkPositions.clear();
+            ProgramState.leftDiffFilePositions.clear();
+            ProgramState.rightDiffHunkPositions.clear();
+            ProgramState.rightDiffFilePositions.clear();
+            StringBuilder left = new StringBuilder();
+            StringBuilder right = new StringBuilder();
+            UnifiedDiff diff = ProgramState.categories.get(ProgramState.currentCategory);
+            int currentFile = 0;
+            progress.init(diff.getFiles().size(), "Loading files");
+            for (UnifiedDiffFile file : diff.getFiles()) {
+                progress.step(currentFile, String.format("%d / %d", currentFile, diff.getFiles().size()));
+                ProgramState.leftDiffFilePositions.add(left.length());
+                ProgramState.rightDiffFilePositions.add(right.length());
+                if (file.getDiffCommand() != null && file.getDiffCommand().startsWith("Only in")) {
+                    int begin = left.length();
+                    left.append(file.getDiffCommand()).append("\n");
+                    leftHighlights.add(new Highlight(begin, left.length(), Color.YELLOW.brighter()));
+                    begin = right.length();
+                    right.append(file.getDiffCommand()).append("\n");
+                    rightHighlights.add(new Highlight(begin, right.length(), Color.YELLOW.brighter()));
+                    currentFile++;
+                    continue;
+                }
                 int begin = left.length();
-                left.append(file.getDiffCommand()).append("\n");
-                leftHighlights.add(new Highlight(begin, left.length(), Color.YELLOW.brighter()));
-                begin = right.length();
-                right.append(file.getDiffCommand()).append("\n");
-                rightHighlights.add(new Highlight(begin, right.length(), Color.YELLOW.brighter()));
-                currentFile++;
-                continue;
-            }
-            int begin = left.length();
-            if (file.getDiffCommand() != null)
-                left.append(file.getDiffCommand()).append("\n");
-            left.append("--- ").append(file.getFromFile()).append("\n");
-            leftHighlights.add(new Highlight(begin, left.length(), Color.LIGHT_GRAY));
-            begin = right.length();
-            if (file.getDiffCommand() != null)
-                right.append(file.getDiffCommand()).append("\n");
-            right.append("+++ ").append(file.getToFile()).append("\n");
-            rightHighlights.add(new Highlight(begin, right.length(), Color.LIGHT_GRAY));
-            for (AbstractDelta<String> delta : file.getPatch().getDeltas()) {
-                int leftHunkStart = left.length();
-                int rightHunkStart = right.length();
-                begin = left.length();
-                left.append("@@ ").append(delta.getSource().getPosition()).append(",").append(delta.getSource().size()).append(" @@\n");
+                if (file.getDiffCommand() != null)
+                    left.append(file.getDiffCommand()).append("\n");
+                left.append("--- ").append(file.getFromFile()).append("\n");
                 leftHighlights.add(new Highlight(begin, left.length(), Color.LIGHT_GRAY));
                 begin = right.length();
-                right.append("@@ ").append(delta.getTarget().getPosition()).append(",").append(delta.getTarget().size()).append(" @@\n");
+                if (file.getDiffCommand() != null)
+                    right.append(file.getDiffCommand()).append("\n");
+                right.append("+++ ").append(file.getToFile()).append("\n");
                 rightHighlights.add(new Highlight(begin, right.length(), Color.LIGHT_GRAY));
-                int leftInlineBegin = -1;
-                int rightInlineBegin = -1;
+                for (AbstractDelta<String> delta : file.getPatch().getDeltas()) {
+                    int leftHunkStart = left.length();
+                    int rightHunkStart = right.length();
+                    begin = left.length();
+                    left.append("@@ ").append(delta.getSource().getPosition()).append(",").append(delta.getSource().size()).append(" @@\n");
+                    leftHighlights.add(new Highlight(begin, left.length(), Color.LIGHT_GRAY));
+                    begin = right.length();
+                    right.append("@@ ").append(delta.getTarget().getPosition()).append(",").append(delta.getTarget().size()).append(" @@\n");
+                    rightHighlights.add(new Highlight(begin, right.length(), Color.LIGHT_GRAY));
+                    int leftInlineBegin = -1;
+                    int rightInlineBegin = -1;
 
-                List<DiffRow> lines = ProgramState.diffRowCache.computeIfAbsent(delta, d -> {
+                    List<DiffRow> lines = ProgramState.diffRowCache.computeIfAbsent(delta, d -> {
+                        try {
+                            return ProgramState.DIFF_ROW_GENERATOR.generateDiffRows(d.getSource().getLines(), d.getTarget().getLines());
+                        } catch (DiffException e) {
+                            left.append("Exception generating diff\n");
+                            right.append("\n");
+                            e.printStackTrace();
+                            return null;
+                        }
+                    });
+                    if (lines != null) {
+                        for (DiffRow line : lines) {
+                            leftInlineBegin = addDiffLine(left, leftHighlights, leftOverlayHighlights,
+                                    line.getOldLine(), line.getTag(), leftInlineBegin,
+                                    ProgramState.BEGINOLD, ProgramState.ENDOLD, new Color(255, 130, 141), DiffRow.Tag.INSERT);
+                            rightInlineBegin = addDiffLine(right, rightHighlights, rightOverlayHighlights,
+                                    line.getNewLine(), line.getTag(), rightInlineBegin,
+                                    ProgramState.BEGINNEW, ProgramState.ENDNEW, new Color(110, 255, 118), DiffRow.Tag.DELETE);
+                        }
+                    }
+
+                    ProgramState.leftDiffHunkPositions.add(new ProgramState.HunkPos(leftHunkStart, left.length(), currentFile));
+                    ProgramState.rightDiffHunkPositions.add(new ProgramState.HunkPos(rightHunkStart, right.length(), currentFile));
+                }
+                currentFile++;
+            }
+            progress.init(5, "Loading");
+
+            progress.step(1, "Parsing Java");
+            leftEditorPane.setText(left.toString());
+            rightEditorPane.setText(right.toString());
+            progress.step(2, "Diff Highlighter");
+            class OverNewlineHighlighter extends DefaultHighlighter.DefaultHighlightPainter {
+                public OverNewlineHighlighter(Color color) {
+                    super(color);
+                }
+
+                @Override
+                public void paint(Graphics graphics, int i, int i1, Shape shape, JTextComponent jTextComponent) {
+                    paintLayer(graphics, i, i1, shape, jTextComponent, null);
+                }
+
+                @Override
+                public Shape paintLayer(Graphics graphics, int i, int i1, Shape shape, JTextComponent jTextComponent, View view) {
+                    graphics.setColor(getColor());
                     try {
-                        return ProgramState.DIFF_ROW_GENERATOR.generateDiffRows(d.getSource().getLines(), d.getTarget().getLines());
-                    } catch (DiffException e) {
-                        left.append("Exception generating diff\n");
-                        right.append("\n");
-                        e.printStackTrace();
+                        Rectangle left = jTextComponent.modelToView(i);
+                        Rectangle rect = new Rectangle(shape.getBounds().x, left.y, jTextComponent.getWidth(), left.height);
+                        graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
+                        return rect;
+                    } catch (BadLocationException ignore) {
                         return null;
                     }
-                });
-                if (lines != null) {
-                    for (DiffRow line : lines) {
-                        leftInlineBegin = addDiffLine(left, leftHighlights, leftOverlayHighlights,
-                                line.getOldLine(), line.getTag(), leftInlineBegin,
-                                ProgramState.BEGINOLD, ProgramState.ENDOLD, new Color(255, 130, 141), DiffRow.Tag.INSERT);
-                        rightInlineBegin = addDiffLine(right, rightHighlights, rightOverlayHighlights,
-                                line.getNewLine(), line.getTag(), rightInlineBegin,
-                                ProgramState.BEGINNEW, ProgramState.ENDNEW, new Color(110, 255, 118), DiffRow.Tag.DELETE);
-                    }
-                }
-
-                ProgramState.leftDiffHunkPositions.add(new ProgramState.HunkPos(leftHunkStart, left.length(), currentFile));
-                ProgramState.rightDiffHunkPositions.add(new ProgramState.HunkPos(rightHunkStart, right.length(), currentFile));
-            }
-            currentFile++;
-        }
-        System.out.println("Setting text");
-        leftEditorPane.setText(left.toString());
-        rightEditorPane.setText(right.toString());
-        System.out.println("Highlighter");
-        class OverNewlineHighlighter extends DefaultHighlighter.DefaultHighlightPainter {
-            public OverNewlineHighlighter(Color color) {
-                super(color);
-            }
-
-            @Override
-            public void paint(Graphics graphics, int i, int i1, Shape shape, JTextComponent jTextComponent) {
-                paintLayer(graphics, i, i1, shape, jTextComponent, null);
-            }
-
-            @Override
-            public Shape paintLayer(Graphics graphics, int i, int i1, Shape shape, JTextComponent jTextComponent, View view) {
-                graphics.setColor(getColor());
-                try {
-                    Rectangle left = jTextComponent.modelToView(i);
-                    Rectangle rect = new Rectangle(shape.getBounds().x, left.y, jTextComponent.getWidth(), left.height);
-                    graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
-                    return rect;
-                } catch (BadLocationException ignore) {
-                    return null;
                 }
             }
-        }
-        try {
-            for (Highlight highlight : leftOverlayHighlights)
-                leftEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new DefaultHighlighter.DefaultHighlightPainter(highlight.color));
-            for (Highlight highlight : rightOverlayHighlights)
-                rightEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new DefaultHighlighter.DefaultHighlightPainter(highlight.color));
-            for (Highlight highlight : leftHighlights)
-                leftEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new OverNewlineHighlighter(highlight.color));
-            for (Highlight highlight : rightHighlights)
-                rightEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new OverNewlineHighlighter(highlight.color));
-        } catch (BadLocationException e) {
-            e.printStackTrace();
-        }
+            try {
+                for (Highlight highlight : leftOverlayHighlights)
+                    leftEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new DefaultHighlighter.DefaultHighlightPainter(highlight.color));
+                for (Highlight highlight : rightOverlayHighlights)
+                    rightEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new DefaultHighlighter.DefaultHighlightPainter(highlight.color));
+                for (Highlight highlight : leftHighlights)
+                    leftEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new OverNewlineHighlighter(highlight.color));
+                for (Highlight highlight : rightHighlights)
+                    rightEditorPane.getHighlighter().addHighlight(highlight.begin, highlight.end, new OverNewlineHighlighter(highlight.color));
+            } catch (BadLocationException e) {
+                e.printStackTrace();
+            }
 
-        System.out.println("Regression model");
-        // Regression model
-        ProgramState.createModel();
+            progress.step(3, "Regression Model");
+            // Regression model
+            ProgramState.createModel();
 
-        System.out.println("Updating selections");
-        updateSelections(frame);
-        System.out.println("Imported");
+            progress.step(4, "Updating selections");
+            updateSelections(frame);
+        });
     }
 
     private static int addDiffLine(StringBuilder output, List<Highlight> highlights, List<Highlight> overlayHighlights, // outputs
